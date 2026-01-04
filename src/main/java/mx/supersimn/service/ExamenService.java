@@ -47,9 +47,9 @@ public class ExamenService {
         List<Pregunta> todas = preguntaRepo.findAll();
         Collections.shuffle(todas); // Aleatoriedad
 
-        // 3. Tomar las primeras 20 y guardarlas
+        // 3. Tomar las primeras 25 y guardarlas
         List<ExamenProgreso> nuevoProgreso = new ArrayList<>();
-        for (int i = 0; i < Math.min(2, todas.size()); i++) {
+        for (int i = 0; i < Math.min(25, todas.size()); i++) {
             ExamenProgreso ep = new ExamenProgreso();
             ep.setAlumno(alumno);
             ep.setPregunta(todas.get(i));
