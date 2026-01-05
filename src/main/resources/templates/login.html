@@ -22,21 +22,40 @@
                             <span th:text="${error}"></span>
                         </div>
 
-                        <form th:action="@{/login}" method="post">
-                            <div class="mb-3">
-                                <label class="form-label">Número de Boleta</label>
-                                <input type="text" name="boleta" class="form-control" required>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label">Contraseña</label>
-                                <input type="password" name="password" class="form-control" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary w-100">Entrar al Examen</button>
-                        </form>
+						<form th:action="@{/login}" method="post" id="loginForm">
+						    <div class="mb-3">
+						        <label class="form-label">Número de Boleta</label>
+						        <input type="text" name="boleta" class="form-control" required>
+						    </div>
+						    <div class="mb-3">
+						        <label class="form-label">Contraseña</label>
+						        <input type="password" name="password" class="form-control" required>
+						    </div>
+						    <button type="button" id="btnSubmit" onclick="enviarFormulario()" class="btn btn-primary w-100">Entrar al Examen</button>
+						</form>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+	<script>
+	    function enviarFormulario() {
+	        const formulario = document.getElementById('loginForm');
+	        const boton = document.getElementById('btnSubmit');
+
+	        // 1. Validar que los campos no estén vacíos (ya que quitamos el submit automático)
+	        if (!formulario.checkValidity()) {
+	            formulario.reportValidity();
+	            return;
+	        }
+
+	        // 2. Deshabilitar inmediatamente el botón
+	        boton.disabled = true;
+	        boton.innerHTML = "Generando examen... por favor espera";
+
+	        // 3. Enviar el formulario por código
+	        formulario.submit();
+	    }
+	</script>
 </body>
 </html>

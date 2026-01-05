@@ -121,166 +121,136 @@
     </div>
 
 	<script th:inline="javascript">
-		let segundos = 120;
-		/* Extraemos el índice que calculó el controlador */
-		/* Thymeleaf inyectará el número aquí */
-		let indiceServidor = [[${indiceInicial}]];
-	    
-	    // 1. Recuperar Paso Actual
-		let currentStep = sessionStorage.getItem('examenStep') 
-		                      ? parseInt(sessionStorage.getItem('examenStep')) 
-		                      : indiceServidor;
-	    
-	    // 2. Recuperar Tiempo (Si no existe o es inválido, 120)
+	    let segundos = 120;
+	    let indiceServidor = [[${indiceInicial}]];
+	    let currentStep = sessionStorage.getItem('examenStep') ? parseInt(sessionStorage.getItem('examenStep')) : indiceServidor;
 	    let savedTime = sessionStorage.getItem('examenTimeLeft');
-	    let timeLeft = (savedTime !== null && !isNaN(savedTime)) 
-	                   ? parseInt(savedTime) 
-	                   : segundos;
+	    let timeLeft = (savedTime !== null && !isNaN(savedTime)) ? parseInt(savedTime) : segundos;
+	    
+	    // --- NUEVA VARIABLE DE CONTROL ---
+	    let enviando = false; 
 
 	    const timerDisplay = document.getElementById('timer');
 
-	    // Función para mostrar la pregunta correcta al cargar (Importante para F5)
 	    function inicializarVista() {
-	        console.log("Cargando en paso:", currentStep, "con tiempo:", timeLeft);
-	        
-	        // Ocultamos todas por seguridad
 	        document.querySelectorAll('.pregunta-card').forEach(card => card.classList.remove('active'));
-	        
-	        // Mostramos la que recuperamos del storage
 	        const cardActual = document.getElementById('p-' + currentStep);
 	        if (cardActual) {
 	            cardActual.classList.add('active');
 	        } else {
-	            // Si por algo falla (ej. step mayor a 20), resetear
 	            sessionStorage.setItem('examenStep', 0);
 	            document.getElementById('p-0').classList.add('active');
 	        }
 	    }
-
-	    // Ejecutar al cargar la página
 	    inicializarVista();
 
-	    // --- LÓGICA DEL CRONÓMETRO ---
-		const countdown = setInterval(() => {
-		    let minutes = Math.floor(timeLeft / 60);
-		    let seconds = timeLeft % 60;
-		    timerDisplay.innerHTML = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-		    
-		    // Guardar cada segundo en el storage para que el F5 no lo resetee
-		    sessionStorage.setItem('examenTimeLeft', timeLeft);
-		    
-		    if (timeLeft <= 0) {
-		        // Buscamos si existe la siguiente tarjeta (p-1, p-2... hasta p-19)
-		        const siguienteExiste = document.getElementById('p-' + (currentStep + 1));
-		        
-		        if (siguienteExiste) {
-		            console.log("Tiempo agotado, pasando a la siguiente...");
-		            siguientePregunta();
-		        } else {
-		            console.log("Tiempo agotado en la última pregunta, finalizando...");
-		            // Detenemos el intervalo para que no se ejecute múltiples veces
-		            clearInterval(countdown); 
-		            finalizarExamen(); // Esta es la función async que guarda y redirige
-		        }
-		    }
-		    timeLeft--;
-		}, 1000);
+	    const countdown = setInterval(() => {
+	        let minutes = Math.floor(timeLeft / 60);
+	        let seconds = timeLeft % 60;
+	        timerDisplay.innerHTML = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+	        sessionStorage.setItem('examenTimeLeft', timeLeft);
+	        
+	        if (timeLeft <= 0) {
+	            const siguienteExiste = document.getElementById('p-' + (currentStep + 1));
+	            if (siguienteExiste) {
+	                // Pasamos true para indicar que es envío por TIEMPO
+	                siguientePregunta(true); 
+	            } else {
+	                clearInterval(countdown); 
+	                finalizarExamen(true); 
+	            }
+	        }
+	        timeLeft--;
+	    }, 1000);
 
-		async function siguientePregunta() {
-		    const cardActual = document.getElementById('p-' + currentStep);
-		    
-		    // 1. Obtener datos para guardar
-		    const radioSeleccionado = cardActual.querySelector('input[type="radio"]:checked');
-		    const progresoId = cardActual.querySelector('input[type="radio"]').name.replace('preg-', '');
-		    const respuestaId = radioSeleccionado ? radioSeleccionado.value : '';
+	    // --- MODIFICADA: siguientePregunta ---
+	    async function siguientePregunta(porTiempo = false) {
+	        if (enviando) return; // BLOQUEO DE DOBLE CLIC
 
-		    // 2. Guardar en la nube (AWAIT)
-		    try {
-		        await fetch(`/examen/guardar-paso?progresoId=${progresoId}&respuestaId=${respuestaId}`, {
-		            method: 'POST'
-		        });
-		    } catch (error) {
-		        console.error("Error al guardar:", error);
-		    }
+	        const cardActual = document.getElementById('p-' + currentStep);
+	        const radioSeleccionado = cardActual.querySelector('input[type="radio"]:checked');
+	        const btnSiguiente = cardActual.querySelector('button');
 
-		    // 3. ACTUALIZAR EL TIMER AQUÍ
-		    // Reiniciamos la variable local y la del storage ANTES de cambiar de tarjeta
-		    timeLeft = segundos; 
-		    sessionStorage.setItem('examenTimeLeft', segundos);
+	        // VALIDACIÓN: Si no hay respuesta y NO es por tiempo, mandar alert
+	        if (!radioSeleccionado && !porTiempo) {
+	            alert("Por favor, selecciona una respuesta antes de continuar.");
+	            return;
+	        }
 
-		    // 4. Lógica visual de cambio de tarjeta
-		    cardActual.classList.remove('active');
-		    currentStep++;
-		    sessionStorage.setItem('examenStep', currentStep);
+	        enviando = true; // Activar bloqueo
+	        if(btnSiguiente) btnSiguiente.disabled = true; // Deshabilitar botón visualmente
 
-		    const siguienteCard = document.getElementById('p-' + currentStep);
-		    if (siguienteCard) {
-		        siguienteCard.classList.add('active');
-		        window.scrollTo(0, 0);
-		    } else {
-		        // Por si acaso llegara aquí sin pasar por finalizarExamen
-		        finalizarExamen();
-		    }
-		}
-		
-		// Esta función se ejecuta cuando el usuario da clic en "Finalizar"
-		function finalizarForzado() {
-		    console.log("Finalizando examen manualmente...");
-		    
-		    // 1. Detenemos el cronómetro para que no siga ejecutando siguientePregunta()
-		    if (typeof countdown !== 'undefined') {
-		        clearInterval(countdown);
-		    }
+	        const progresoId = cardActual.querySelector('input[type="radio"]').name.replace('preg-', '');
+	        const respuestaId = radioSeleccionado ? radioSeleccionado.value : '';
 
-		    // 2. Limpiamos el almacenamiento para que no haya basura al recargar
-		    sessionStorage.removeItem('examenTimeLeft');
-		    sessionStorage.removeItem('examenStep');
-		    
-		    // El formulario se enviará normalmente después de esto
-		    return true; 
-		}
+	        try {
+	            await fetch(`/examen/guardar-paso?progresoId=${progresoId}&respuestaId=${respuestaId}`, {
+	                method: 'POST'
+	            });
 
-	    // --- BLOQUEOS EXTRAS ---
+	            // Reiniciar variables para la siguiente
+	            timeLeft = segundos; 
+	            sessionStorage.setItem('examenTimeLeft', segundos);
+	            
+	            cardActual.classList.remove('active');
+	            currentStep++;
+	            sessionStorage.setItem('examenStep', currentStep);
+
+	            const siguienteCard = document.getElementById('p-' + currentStep);
+	            if (siguienteCard) {
+	                siguienteCard.classList.add('active');
+	                window.scrollTo(0, 0);
+	            } else {
+	                finalizarExamen(porTiempo);
+	            }
+	        } catch (error) {
+	            console.error("Error al guardar:", error);
+	        } finally {
+	            enviando = false; // Liberar bloqueo para la siguiente pregunta
+	            if(btnSiguiente) btnSiguiente.disabled = false;
+	        }
+	    }
+
+	    // --- MODIFICADA: finalizarExamen ---
+	    async function finalizarExamen(porTiempo = false) {
+	        if (enviando) return; // BLOQUEO DE DOBLE CLIC
+
+	        const cardActual = document.getElementById('p-' + currentStep);
+	        const radioSeleccionado = cardActual.querySelector('input[type="radio"]:checked');
+	        const btnFinalizar = cardActual.querySelector('.btn-danger');
+
+	        // VALIDACIÓN
+	        if (!radioSeleccionado && !porTiempo) {
+	            alert("Por favor, selecciona una respuesta antes de finalizar.");
+	            return;
+	        }
+
+	        enviando = true;
+	        if(btnFinalizar) {
+	            btnFinalizar.disabled = true;
+	            btnFinalizar.innerText = "Enviando...";
+	        }
+
+	        const progresoId = cardActual.querySelector('input[type="radio"]').name.replace('preg-', '');
+	        const respuestaId = radioSeleccionado ? radioSeleccionado.value : '';
+
+	        try {
+	            await fetch(`/examen/guardar-paso?progresoId=${progresoId}&respuestaId=${respuestaId}`, {
+	                method: 'POST'
+	            });
+	            
+	            sessionStorage.clear();
+	            window.location.href = "/examen/finalizar-y-calcular"; 
+	        } catch (error) {
+	            console.error("Error al finalizar:", error);
+	            enviando = false;
+	            if(btnFinalizar) btnFinalizar.disabled = false;
+	        }
+	    }
+
+	    // Bloqueos de navegación
 	    history.pushState(null, null, location.href);
-	    window.onpopstate = function () {
-	        history.go(1);
-	    };
-		
-		function inicializarVista() {
-		        // Aseguramos que la vista coincida con el paso
-		        document.querySelectorAll('.pregunta-card').forEach(card => card.classList.remove('active'));
-		        const cardActual = document.getElementById('p-' + currentStep);
-		        if (cardActual) {
-		            cardActual.classList.add('active');
-		        }
-		        window.scrollTo(0, 0);
-		}
-		
-		async function finalizarExamen() {
-		    const cardActual = document.getElementById('p-' + currentStep);
-		    
-		    // 1. Obtener datos de la ÚLTIMA pregunta
-		    const radioSeleccionado = cardActual.querySelector('input[type="radio"]:checked');
-		    const progresoId = cardActual.querySelector('input[type="radio"]').name.replace('preg-', '');
-		    const respuestaId = radioSeleccionado ? radioSeleccionado.value : '';
-
-		    // 2. Guardar la última respuesta y esperar confirmación (AWAIT)
-		    try {
-		        await fetch(`/examen/guardar-paso?progresoId=${progresoId}&respuestaId=${respuestaId}`, {
-		            method: 'POST'
-		        });
-		        
-		        // 3. Una vez guardado, limpiamos storage y redirigimos al cálculo final
-		        sessionStorage.clear();
-		        window.location.href = "/examen/finalizar-y-calcular"; 
-		    } catch (error) {
-		        console.error("Error al finalizar:", error);
-		        alert("Hubo un error al enviar tu última respuesta. Intenta de nuevo.");
-		    }
-		}
-		    
-		inicializarVista();
-
+	    window.onpopstate = function () { history.go(1); };
 	    document.addEventListener('contextmenu', e => e.preventDefault());
 	</script>
 </body>
